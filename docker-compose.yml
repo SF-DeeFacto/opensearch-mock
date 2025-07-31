@@ -1,0 +1,46 @@
+# docker-compose.yml
+version: '3.8'
+services:
+  opensearch-node:
+    image: opensearchproject/opensearch:2.13.0 # OpenSearch 버전 명시
+    container_name: opensearch-node
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m # 개발용 JVM 힙 메모리
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=StrongPassword22!" # 관리자 비밀번호
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - 9200:9200 # OpenSearch API (HTTPS)
+      - 9600:9600 # Transport Layer
+    networks:
+      - opensearch-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.13.0 # OpenSearch와 동일 버전
+    container_name: opensearch-dashboards
+    ports:
+      - 5601:5601 # Dashboards 웹 UI
+    expose:
+      - 5601
+    environment:
+      - OPENSEARCH_HOSTS=["https://opensearch-node:9200"]
+      - "OPENSEARCH_USERNAME=admin"
+      - "OPENSEARCH_PASSWORD=StrongPassword22!"
+    networks:
+      - opensearch-net
+    depends_on:
+      - opensearch-node
+
+networks:
+  opensearch-net:
+
+volumes:
+  opensearch-data:
