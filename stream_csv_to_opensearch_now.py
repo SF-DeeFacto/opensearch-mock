@@ -3,6 +3,7 @@ from opensearchpy import OpenSearch, helpers
 import os
 import datetime
 import time
+import threading
 
 host = 'localhost'
 port = 9200
@@ -54,8 +55,6 @@ def stream_csv_data_to_opensearch(file_path):
     print(f"Starting to stream data from CSV file: {file_path}")
 
     df = pd.read_csv(file_path)
-    # CSV의 timestamp 컬럼은 더 이상 사용하지 않고, 현재 시간을 사용합니다.
-    # df['timestamp'] = pd.to_datetime(df['timestamp']) # 이 줄은 이제 필요 없습니다.
     
     # 시간 순서로 정렬하는 것은 현재 timestamp를 사용하기 때문에 의미가 없어지지만,
     # 원본 CSV의 id 순서나 다른 필드를 기준으로 데이터의 순서를 유지하고 싶다면 유지할 수 있습니다.
@@ -86,7 +85,81 @@ def stream_csv_data_to_opensearch(file_path):
 
         time.sleep(1) # 1초 간격으로 데이터 삽입
 
+
+def stream_csv_data_to_opensearch2(file_path):
+    """CSV 파일을 실시간 스트림처럼 읽어 OpenSearch로 적재합니다. timestamp는 현재 시간으로 설정됩니다."""
+    if not os.path.exists(file_path):
+        print(f"Error: CSV file not found at '{file_path}'")
+        return
+
+    print(f"Starting to stream data from CSV file: {file_path}")
+
+    df = pd.read_csv(file_path)
+    
+    print(f"Total {len(df)} records to stream.")
+
+    for index, row in df.iterrows():
+        # 현재 시간을 UTC ISO 8601 형식 (밀리초 포함)으로 생성
+        current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+        
+        # sensor_id_timestamp 생성 (':' 제거)
+        sensor_id_timestamp = f"{row['sensor_id']}_{current_timestamp}".replace(':', '').replace('-', '').replace('T', '')
+
+        doc = {
+            'id': str(row['id']),
+            'sensor_id': str(row['sensor_id']),
+            'zone_id': str(row['zone_id']),
+            'timestamp': current_timestamp,  # CSV timestamp 대신 현재시간
+            'sensor_type': str(row['sensor_type']),
+            'unit': str(row['unit']),
+            'val': float(row['val']),
+            'sensor_id_timestamp': sensor_id_timestamp
+        }
+
+        try:
+            # sensor_id_timestamp를 OpenSearch 문서 _id로도 지정하면 중복 방지에 좋음
+            response = client.index(index=index_name, id=sensor_id_timestamp, body=doc)
+            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Inserted document (ID: {response['_id']}): Sensor: {doc['sensor_id']}, Type: {doc['sensor_type']}, Value: {doc['val']} at {doc['timestamp']}")
+        except Exception as e:
+            print(f"Error inserting document at row {index}: {e}")
+
+        time.sleep(1)  # 1초 간격으로 데이터 삽입
+
+
+# if __name__ == '__main__':
+#     create_index_if_not_exists()
+#     stream_csv_data_to_opensearch(csv_file_path)
+#     print("CSV data streaming simulation complete.")
+
+
 if __name__ == '__main__':
     create_index_if_not_exists()
-    stream_csv_data_to_opensearch(csv_file_path)
-    print("CSV data streaming simulation complete.")
+
+    # 두 개의 CSV 파일 경로
+    csv_file_1 = 'sensor_data.csv'
+    csv_file_2 = 'humi_meta.csv'
+    csv_file_3 = 'temp2_meta.csv'
+    csv_file_4 = 'humi2_meta.csv'
+
+    # 각각의 스레드 정의
+    thread1 = threading.Thread(target=stream_csv_data_to_opensearch, args=(csv_file_1,))
+    thread2 = threading.Thread(target=stream_csv_data_to_opensearch, args=(csv_file_2,))
+    thread3 = threading.Thread(target=stream_csv_data_to_opensearch, args=(csv_file_3,))
+    thread4 = threading.Thread(target=stream_csv_data_to_opensearch, args=(csv_file_4,))
+
+    # 스레드 시작
+    thread1.start()
+    thread2.start()
+    thread3.start()
+    thread4.start()
+
+    # 모든 스레드가 종료될 때까지 대기
+    thread1.join()
+    thread2.join()
+    thread3.join()
+    thread4.join()
+
+    print("All CSV data streaming simulations complete.")
+
+
+
