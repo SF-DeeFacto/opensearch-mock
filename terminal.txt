@@ -10,4 +10,10 @@ pip install pandas opensearch-py
 python 파일명.py
 deactivate
 
+# python 파일 선택
+stream_csv_to_opensearch: 센서 5개 데이터 (local)
 
+# Grafana (cmd 관리자 권한 실행)
+net stop Grafana
+net start Grafana
+(admin/admin)
